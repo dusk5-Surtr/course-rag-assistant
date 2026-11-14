@@ -91,6 +91,10 @@ REFUSAL_MARKERS = ("未找到", "资料不足", "无法", "不做推测")
 def _content_ok(case: EvaluationCase, answer: str) -> bool:
     if case.expect_refusal:
         return any(marker in answer for marker in REFUSAL_MARKERS)
+    # 非拒答题如果以“未找到”开头，说明模型没有回答问题；
+    # 注意不能因为答案中引用了“资料不足时应拒答”这句话而误判。
+    if answer.strip().startswith(REFUSAL_MARKERS):
+        return False
     if any(phrase not in answer for phrase in case.must_include):
         return False
     if case.any_of and not any(phrase in answer for phrase in case.any_of):
@@ -198,11 +202,22 @@ def main() -> int:
     ]
     if fallback_note:
         lines.append(f"- 配置回退说明：{fallback_note}")
+
+    is_demo = service.mode == "本地检索演示"
+    report_command = (
+        "python scripts/evaluate.py --demo"
+        if is_demo
+        else "python scripts/evaluate.py"
+    )
+    report_note = (
+        "演示模式使用本地检索与抽取式摘要，不等同于真实大模型回答。"
+        if is_demo
+        else f"本报告使用{service.mode}生成，回答质量依赖所配置的模型与网络服务。"
+    )
     lines.extend(
         [
             "",
-            "> 说明：本报告由 `python scripts/evaluate.py --demo` 生成。"
-            "演示模式使用本地检索与抽取式摘要，不等同于真实大模型回答。",
+            f"> 说明：本报告由 `{report_command}` 生成。{report_note}",
             "",
             "| # | 问题 | 结果 | 命中来源 | 回答摘要 |",
             "|---:|---|:---:|---|---|",
@@ -228,7 +243,7 @@ def main() -> int:
             "## 复现方式",
             "",
             "```bash",
-            "python scripts/evaluate.py --demo",
+            report_command,
             "```",
             "",
         ]

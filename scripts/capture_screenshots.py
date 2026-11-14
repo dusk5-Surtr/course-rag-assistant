@@ -29,7 +29,7 @@ def _assert_page_ok(page: Page) -> None:
         raise RuntimeError(f"页面出现异常：{exceptions.first.inner_text()[:500]}")
 
 
-def capture(base_url: str, output_dir: Path) -> None:
+def capture(base_url: str, output_dir: Path, prefix: str, question_text: str) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     with sync_playwright() as playwright:
@@ -48,12 +48,15 @@ def capture(base_url: str, output_dir: Path) -> None:
 
         page.goto(base_url, wait_until="domcontentloaded", timeout=60_000)
         page.locator(".hero h1").wait_for(state="visible", timeout=60_000)
+        page.locator(".stat-card").first.wait_for(state="visible", timeout=60_000)
+        question = page.get_by_role("button", name=question_text)
+        question.wait_for(state="visible", timeout=60_000)
+        page.locator('[data-testid="stForm"]').wait_for(state="visible", timeout=60_000)
         page.wait_for_timeout(1_500)
         _assert_page_ok(page)
-        page.screenshot(path=output_dir / "app-home.png", full_page=False)
-        print("saved app-home.png")
+        page.screenshot(path=output_dir / f"{prefix}-home.png", full_page=False)
+        print(f"saved {prefix}-home.png")
 
-        question = page.get_by_role("button", name=DEFAULT_QUESTION)
         question.click()
         page.get_by_text("查看引用来源", exact=False).first.wait_for(
             state="visible", timeout=60_000
@@ -68,8 +71,8 @@ def capture(base_url: str, output_dir: Path) -> None:
         chat_messages = page.locator('[data-testid="stChatMessage"]')
         chat_messages.last.scroll_into_view_if_needed()
         page.wait_for_timeout(500)
-        page.screenshot(path=output_dir / "app-answer.png", full_page=False)
-        print("saved app-answer.png")
+        page.screenshot(path=output_dir / f"{prefix}-answer.png", full_page=False)
+        print(f"saved {prefix}-answer.png")
 
         body_text = page.locator("body").inner_text()
         print(f"page_chars={len(body_text)}")
@@ -82,12 +85,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="截图智学助手真实运行界面")
     parser.add_argument("--base-url", default="http://127.0.0.1:8501")
     parser.add_argument("--output-dir", type=Path, default=Path("docs/images"))
+    parser.add_argument("--prefix", default="app")
+    parser.add_argument("--question", default=DEFAULT_QUESTION)
     args = parser.parse_args()
 
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     try:
-        capture(args.base_url, args.output_dir)
+        capture(args.base_url, args.output_dir, args.prefix, args.question)
     except Exception as exc:
         print(f"capture failed: {exc}", file=sys.stderr)
         return 1

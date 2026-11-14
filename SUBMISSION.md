@@ -16,12 +16,13 @@
 README：见附件 README.md（同时附 README.pdf 便于预览）
 
 自测情况：
-- 12 个自动化测试通过（含 Streamlit 页面冒烟、检索问答、拒答、在线/离线协议 Mock 调用）；
-- 8/8 固定问题集通过（本地检索演示模式，100%）；
-- 真实浏览器页面已截图并人工检查；
-- 仓库无真实 API Key，已配置 .env.example 与 .gitignore。
+- 15 个自动化测试通过（含 Streamlit 页面冒烟、检索知识库、标题重排、拒答门控、在线/离线模型调用）；
+- DeepSeek deepseek-chat 在线模式：8/8 固定问题通过（100%）；
+- Ollama qwen2.5:1.5b 离线模式：8/8 固定问题通过（100%）；
+- 在线首页、在线回答、离线回答均来自真实浏览器运行并已人工检查；
+- 仓库无真实 API Key，仅提交 .env.example 与 .gitignore。
 
-说明：本机没有配置真实在线 API Key，也未安装 Ollama，因此真实模型回答质量需要按 README 配置后验证；在线与离线 LangChain 调用路径已通过本地协议 Mock 服务完成集成测试。
+说明：固定问题集使用关键词覆盖与来源定位自动检查；在线模型与 Ollama 离线模型均已完成真实调用，详细报告见 evaluation/latest.md 和 evaluation/offline.md。
 ```
 
 ## 2. 附加文件
@@ -30,7 +31,7 @@ README：见附件 README.md（同时附 README.pdf 便于预览）
 
 1. `README.md`：仓库中的同一份 README；
 2. `README.pdf`：README 的可预览版本；
-3. 可选：`docs/images/app-home.png` 和 `docs/images/app-answer.png`，作为运行截图。
+3. 可选：`docs/images/app-home.png`、`docs/images/app-answer.png` 和 `docs/images/app-offline-answer.png`，作为在线/离线运行截图。
 
 平台要求只上传 README 时，以 `README.pdf` 为主附件，并在文本提交中附上公开仓库链接。
 
@@ -45,11 +46,11 @@ README：见附件 README.md（同时附 README.pdf 便于预览）
 - [ ] 上传 README.md 和 README.pdf；
 - [ ] 点击提交后确认平台显示提交成功。
 
-## 4. 如果真实模型暂未配置
+## 4. 运行模式说明
 
-默认 `LLM_PROVIDER=demo` 可以完整演示检索、来源和拒答。若需要展示真实大模型回答，按 README 第 6.4 节或第 6.5 节配置：
+仓库默认 `.env.example` 使用 `LLM_PROVIDER=demo`，便于无 Key 环境快速启动。实际验收已完成以下两种真实模型模式：
 
-- 在线：DeepSeek/Qwen 等兼容 OpenAI 接口的服务；
-- 离线：安装 Ollama 后拉取本地模型。
+- 在线：DeepSeek `deepseek-chat`；
+- 离线：Ollama `qwen2.5:1.5b`。
 
-切换后重启 `streamlit run app.py`，界面的运行模式会变为“在线大模型”或“离线大模型”。
+切换模型只需修改本地 `.env` 并重启 `streamlit run app.py`，界面会显示当前运行模式。真实 `.env` 不进入 Git 仓库。

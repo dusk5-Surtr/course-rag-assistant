@@ -4,16 +4,17 @@ GitHub 公开仓库验证记录
 仓库 URL：https://github.com/dusk5-Surtr/course-rag-assistant
 可见性：PUBLIC
 默认分支：main
-最新推送提交：4fd1f4850aec21b7b6fe27f2e9304cbe32b3d887
-GitHub Actions：run 43543976063，状态 success
-README.md：远程 API 校验存在，17,064 bytes，包含仓库链接与测试结果
-README.pdf：远程 API 校验存在，1,193,934 bytes
-首页截图：远程 API 校验存在，399,008 bytes
-答案截图：远程 API 校验存在，490,237 bytes
+公开 README：已通过 GitHub API 校验存在
+公开 PDF：已通过 GitHub API 校验存在
+公开截图：已通过 GitHub API 校验存在
+GitHub Actions：历史运行 43544678059 成功（新提交后以仓库 Actions 页面最新结果为准）
 
-本地验证：
-- python -m pytest -q：12 passed
-- python scripts/evaluate.py --demo：8/8（100%）
-- Streamlit 页面：http://127.0.0.1:8501，HTTP 200
-- Playwright + Microsoft Edge 截图已人工查看：首页、带来源引用的回答页
-- PDF：README.pdf，15 页，LibreOffice Kit 渲染页面已人工查看，无缺失字体
+真实模型验证：
+- 在线模式：DeepSeek deepseek-chat，固定问题 8/8（100%）
+- 离线模式：Ollama qwen2.5:1.5b，固定问题 8/8（100%）
+- 交互页面：在线首页、在线回答、离线回答均已通过 Playwright + Microsoft Edge 截图并人工检查
+- 测试：15 passed
+- 拒答：知识库外 MCP 问题由相关性门控明确拒绝
+- PDF：README.pdf 已生成；LibreOffice Kit 页面渲染已人工检查，无缺失字体
+
+说明：真实 API Key 只存在本地 .env，不进入 Git 仓库。

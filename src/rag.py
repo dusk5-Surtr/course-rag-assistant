@@ -87,6 +87,68 @@ def _clean_markdown_line(text: str) -> str:
     return cleaned[:300].rstrip() + "…" if len(cleaned) > 300 else cleaned
 
 
+def _section_heading(document: Document) -> str:
+    for line in document.page_content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            return stripped.lstrip("#").strip()
+    return ""
+
+
+MIN_RETRIEVAL_COVERAGE = 0.15
+
+
+def _retrieval_coverage(question: str, documents: Sequence[Document]) -> float:
+    query_terms = lexical_terms(question)
+    if not query_terms or not documents:
+        return 0.0
+    return max(
+        len(query_terms & lexical_terms(document.page_content))
+        / len(query_terms)
+        for document in documents
+    )
+
+
+def _rerank_documents(
+    question: str,
+    documents: Sequence[Document],
+    top_k: int,
+) -> list[Document]:
+    """对向量召回候选做轻量混合重排。
+
+    默认 Embedding 零下载、可复现，但纯哈希向量对短标题不够敏感。
+    这里叠加正文词项覆盖、章节标题匹配和向量召回顺序：
+    既保留向量检索，又确保“ReAct 框架”这类标题能进入上下文。
+    """
+
+    query_terms = lexical_terms(question)
+    if not query_terms or not documents:
+        return list(documents[:top_k])
+
+    total = max(1, len(documents))
+    scored: list[tuple[float, Document]] = []
+    for rank, document in enumerate(documents):
+        content_terms = lexical_terms(document.page_content)
+        heading_terms = lexical_terms(_section_heading(document))
+        content_hits = query_terms & content_terms
+        heading_hits = query_terms & heading_terms
+
+        coverage = len(content_hits) / max(1, len(query_terms))
+        vector_rank_score = 1.0 - rank / (total + 1)
+        heading_boost = 0.0
+        for term in heading_hits:
+            if re.fullmatch(r"[a-z0-9_.+-]{2,}", term):
+                heading_boost += 0.32
+            else:
+                heading_boost += 0.06
+
+        score = 0.30 * vector_rank_score + 0.45 * coverage + heading_boost
+        scored.append((score, document))
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [document for _, document in scored[:top_k]]
+
+
 def _following_list_items(
     document: Document,
     anchor: str,
@@ -238,8 +300,12 @@ class RagService:
         self.embedding = create_embeddings(settings)
         self.vector_store = InMemoryVectorStore(embedding=self.embedding)
         self.vector_store.add_documents(list(self.chunks))
+        self.candidate_k = min(
+            len(self.chunks),
+            max(settings.top_k * 4, 12),
+        )
         self.retriever = self.vector_store.as_retriever(
-            search_kwargs={"k": settings.top_k}
+            search_kwargs={"k": self.candidate_k}
         )
 
         if llm is not None:
@@ -260,7 +326,8 @@ class RagService:
         return self.llm is not None
 
     def retrieve(self, question: str) -> list[Document]:
-        return list(self.retriever.invoke(question))
+        candidates = list(self.retriever.invoke(question))
+        return _rerank_documents(question, candidates, self.settings.top_k)
 
     def ask(self, question: str) -> RagAnswer:
         normalized_question = question.strip()
@@ -269,8 +336,14 @@ class RagService:
 
         started = time.perf_counter()
         documents = self.retrieve(normalized_question)
+        coverage = _retrieval_coverage(normalized_question, documents)
         if not documents:
             answer = "知识库中未找到相关片段。请先补充课程资料或换一种问法。"
+        elif coverage < MIN_RETRIEVAL_COVERAGE:
+            answer = (
+                "知识库中未找到足够依据。当前资料没有覆盖这个问题，"
+                "因此不做推测性回答。"
+            )
         elif self.answer_chain is None:
             answer, _status = _demo_answer(normalized_question, documents)
         else:
@@ -281,6 +354,19 @@ class RagService:
                 }
             )
             answer = str(answer).strip()
+            # 小参数离线模型偶尔忽略引用格式；若答案没有引用，补充本次检索来源，
+            # 保证 UI 与评测始终可以追溯，同时不改写模型正文。
+            if (
+                answer
+                and "[来源：" not in answer
+                and "[来源:" not in answer
+                and not answer.startswith(("知识库中未找到", "资料不足", "无法"))
+            ):
+                citations = " ".join(
+                    f"[来源：{document.metadata.get('citation', '未知来源')}]"
+                    for document in documents
+                )
+                answer = f"{answer}\n\n参考来源：{citations}"
 
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         return RagAnswer(

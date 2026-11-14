@@ -30,6 +30,9 @@
 - 真实使用 LangChain `Document`、`TextSplitter`、`Embeddings`、`InMemoryVectorStore`、`Retriever`、`ChatPromptTemplate`、`ChatModel` 和 `OutputParser`；
 - 回答附带 `文件名#片段编号`，界面可以展开查看原文；
 - 提示词要求“只依据资料回答”，无依据时明确说“未找到”；
+- 章节标题感知的轻量混合重排，改善短标题问题的召回；
+- 检索相关性门控与引用补全，降低小参数离线模型的离题和漏引用；
+- 已实际验证 DeepSeek 在线模型与 Ollama 本地模型两条链路；
 - 支持 DeepSeek/Qwen 等 OpenAI 兼容接口，也支持本地 Ollama；
 - 无 API Key 时自动/手动切换到本地演示模式，不会白屏；
 - 包含 8 条固定评测问题和可复现的评测脚本；
@@ -38,11 +41,17 @@
 
 ## 2. 界面预览
 
+### 2.1 在线大模型模式
+
 ![智学助手首页](docs/images/app-home.png)
 
-![带来源引用的回答](docs/images/app-answer.png)
+![DeepSeek 在线模式的带来源回答](docs/images/app-answer.png)
 
-> 截图来自本项目真实运行结果。演示模式使用本地检索与抽取式回答，不等同于真实大模型生成。
+### 2.2 Ollama 离线模型模式
+
+![Ollama 离线模式的带来源回答](docs/images/app-offline-answer.png)
+
+> 截图来自本项目真实运行结果。在线截图使用 DeepSeek `deepseek-chat`；离线截图使用 Ollama `qwen2.5:1.5b`。两种模式均能展示检索来源，资料不足时会明确拒答。
 
 ## 3. 功能清单
 
@@ -51,13 +60,14 @@
 - [x] 加载 Markdown、TXT、PDF 文档；
 - [x] 递归字符切分，并保存 `file_name`、`page`、`chunk_index`、`citation` 元数据；
 - [x] 使用 LangChain `InMemoryVectorStore` 完成向量检索；
+- [x] 章节标题感知的混合重排与检索相关度门控；
 - [x] 使用 LangChain Prompt、ChatModel、OutputParser 组合问答链；
 - [x] 支持在线 OpenAI 兼容接口与离线 Ollama；
 - [x] 无 API Key 的本地检索演示模式；
-- [x] 带来源的回答与来源片段展开；
+- [x] 带来源的回答、引用补全与来源片段展开；
 - [x] 对资料外问题拒答；
 - [x] Streamlit 网页界面与示例问题；
-- [x] 自动化测试与 8 条固定问题评测；
+- [x] 15 个自动化测试与 8 条固定问题评测；
 - [x] GitHub Actions 自动运行测试与演示评测；
 - [x] `.env` 密钥隔离与 `.gitignore`；
 - [x] 公开示例课程资料。
@@ -68,7 +78,7 @@
 - 多用户登录、权限控制与云端持久化；
 - 多轮对话记忆；
 - 向量索引磁盘缓存（当前启动时重建小型知识库）；
-- 生产级重排序和混合检索。
+- 生产级神经 Reranker 与大规模检索基础设施。
 
 ## 4. 系统架构
 
@@ -124,9 +134,10 @@ flowchart LR
 | 应用编排 | LangChain | 文档、检索器、提示词、模型、输出解析 |
 | 向量存储 | `InMemoryVectorStore` | 适合小型课程知识库 |
 | 默认 Embedding | Signed Hashing Embedding | 零下载、确定性、离线可运行 |
+| 检索增强 | 标题感知混合重排 + 相关度门控 | 候选扩召回后按正文覆盖和章节标题重排 |
 | 可选 Embedding | `BAAI/bge-small-zh-v1.5` | 通过 `langchain-huggingface` 接入 |
-| 在线模型 | DeepSeek / Qwen 等 OpenAI 兼容接口 | `langchain-openai` |
-| 离线模型 | Ollama | `langchain-ollama` |
+| 在线模型 | DeepSeek / Qwen 等 OpenAI 兼容接口 | 已实测 `deepseek-chat` |
+| 离线模型 | Ollama | 已实测 `qwen2.5:1.5b` |
 | PDF 解析 | pypdf | 仅支持有文本层的 PDF |
 | 测试与评测 | pytest + 固定问题集 | 见 `tests/` 与 `scripts/evaluate.py` |
 
@@ -201,24 +212,24 @@ Qwen、其他兼容 OpenAI 接口的服务也可以使用同一套配置，只�
 ### 6.5 切换离线 Ollama
 
 1. 安装 Ollama；
-2. 拉取一个本地模型，例如：
+2. 拉取一个本地模型。本仓库已验证 `qwen2.5:1.5b`：
 
 ```bash
-ollama pull qwen2.5:7b
+ollama pull qwen2.5:1.5b
 ```
 
 3. 修改 `.env`：
 
 ```dotenv
 LLM_PROVIDER=ollama
-LLM_MODEL=qwen2.5:7b
-LLM_BASE_URL=http://localhost:11434
+LLM_MODEL=qwen2.5:1.5b
+LLM_BASE_URL=http://127.0.0.1:11434
 LLM_API_KEY=
 ```
 
 4. 启动应用。
 
-离线模式要求本机有足够的内存或显存；首次拉取模型需要联网。模型越大，效果通常越好，但硬件要求也越高。
+离线模式要求本机有足够的内存或显存；首次拉取模型需要联网。模型越大，效果通常越好，但硬件要求也越高。本机验证环境为 32 GB 内存、NVIDIA RTX 4060 Laptop 4 GB 显存，`qwen2.5:1.5b` 单次问答约 1.5～3.5 秒。
 
 ### 6.6 可选：使用本地语义 Embedding
 
@@ -317,12 +328,32 @@ python -m pytest -q
 - Hashing Embedding 的确定性与归一化；
 - 示例资料加载、切分和 citation 元数据；
 - 课程问题能够检索到对应来源；
+- 标题感知重排能够找到 ReAct 章节；
 - 演示模式生成带来源的回答；
-- 知识库外问题能够拒答；
+- 知识库外问题能够被相关性门控拒绝；
+- 缺失行内引用时自动补充来源；
 - LangChain 问答链可以使用注入的测试模型运行；
-- OpenAI 兼容接口与 Ollama 协议路径可以通过本地 Mock 服务完成调用。
+- OpenAI 兼容接口与 Ollama 协议路径可以通过本地 Mock 服务完成调用；
+- Streamlit 页面可以启动并完成一次示例问答。
 
 ### 9.2 固定问题集评测
+
+在线模式（使用 `.env` 中的在线配置）：
+
+```bash
+python scripts/evaluate.py
+```
+
+离线模式（PowerShell 环境变量覆盖示例）：
+
+```powershell
+$env:LLM_PROVIDER="ollama"
+$env:LLM_MODEL="qwen2.5:1.5b"
+$env:LLM_BASE_URL="http://127.0.0.1:11434"
+python scripts/evaluate.py --output evaluation/offline.md --json evaluation/offline.json
+```
+
+无模型演示模式：
 
 ```bash
 python scripts/evaluate.py --demo
@@ -330,38 +361,39 @@ python scripts/evaluate.py --demo
 
 脚本会生成：
 
-- `evaluation/latest.md`：人类可读评测报告；
-- `evaluation/latest.json`：结构化结果。
+- `evaluation/latest.md` / `evaluation/latest.json`：默认评测结果；
+- `evaluation/offline.md` / `evaluation/offline.json`：离线模型评测结果。
 
 评测覆盖事实问答、跨片段信息、拒答和来源定位。
 
 ### 9.3 实际验证结果
 
-验证时间：2026-11-14；环境：Windows + Python 3.11.4。
+验证时间：2026-11-14；环境：Windows + Python 3.11.4 + Ollama 0.40.16。
 
 | 验证项 | 实际结果 |
 |---|---|
-| 自动化测试 | `12 passed` |
-| 固定问题集评测 | `8/8`，100%（本地检索演示模式） |
-| 真实浏览器页面 | 首页与问答页均已截图并人工检查 |
-| 在线模型集成 | 通过本地 OpenAI 兼容协议 Mock 服务验证 LangChain ChatModel 调用链 |
-| 离线模型集成 | 通过本地 Ollama `/api/chat` 协议 Mock 服务验证 LangChain ChatModel 调用链 |
+| 自动化测试 | `15 passed` |
+| 在线模型评测 | DeepSeek `deepseek-chat`：`8/8`，100% |
+| 离线模型评测 | Ollama `qwen2.5:1.5b`：`8/8`，100% |
+| 真实浏览器页面 | 在线首页、在线回答、离线回答均已截图并人工检查 |
+| 在线调用链 | 真实 DeepSeek API 返回带行内来源的回答 |
+| 离线调用链 | 真实 Ollama 本地模型完成问答；缺失行内引用时自动补全来源 |
+| 协议兼容测试 | OpenAI 兼容接口与 Ollama `/api/chat` 的 Mock 测试仍保留 |
+| 拒答能力 | 知识库外 MCP 问题由相关性门控明确拒绝 |
 | API Key 泄露检查 | 仓库只包含 `.env.example`，无真实密钥 |
 
-> 评测口径说明：`8/8` 是**本地检索演示模式**的固定问题集结果，不等同于真实大模型回答质量。
-> 本机当前没有配置在线 API Key，也未安装 Ollama，因此真实模型服务的回答质量需要使用者按第 6 节配置后自行验证。
-> 在线与离线代码路径已经用本地协议 Mock 服务完成集成冒烟测试，详见 `tests/test_provider_http.py`。
+> 评测口径说明：8 条问题使用关键词覆盖和来源定位进行自动检查，不代表完整的人工语义评分。
+> 在线报告见 [evaluation/latest.md](evaluation/latest.md)，离线报告见 [evaluation/offline.md](evaluation/offline.md)。
 
-完整报告见 [evaluation/latest.md](evaluation/latest.md)，结构化结果见 [evaluation/latest.json](evaluation/latest.json)。
-
-### 9.3 手工验收建议
+### 9.4 手工验收建议
 
 1. 删除 `.venv` 后按 README 重新安装，验证可复现性；
 2. 使用 `/` 路径和中文路径各启动一次；
 3. 在没有 API Key 的情况下确认演示模式可用；
 4. 配置自己的 Key 后确认在线模式可回答；
-5. 上传一个知识库外问题，确认出现明确拒答；
-6. 检查浏览器与仓库中不含真实 Key。
+5. 启动 Ollama 后确认离线模式可回答；
+6. 上传一个知识库外问题，确认出现明确拒答；
+7. 检查浏览器与仓库中不含真实 Key。
 
 ## 10. 项目结构
 
@@ -380,11 +412,15 @@ course-rag-assistant/
 ├─ docs/images/                   # README 截图
 ├─ .github/workflows/tests.yml    # GitHub Actions 自动测试
 ├─ evaluation/                    # 实际评测报告
-│  ├─ latest.md
-│  └─ latest.json
+│  ├─ latest.md                   # 在线模型报告
+│  ├─ latest.json
+│  ├─ offline.md                  # Ollama 离线模型报告
+│  ├─ offline.json
+│  └─ github_verification.txt
 ├─ scripts/
 │  ├─ evaluate.py                 # 固定问题集评测
-│  └─ capture_screenshots.py      # 真实浏览器截图
+│  ├─ capture_screenshots.py      # 真实浏览器截图
+│  └─ export_readme_pdf.py        # README.pdf 导出
 ├─ tests/
 │  ├─ test_app.py                 # Streamlit 界面冒烟测试
 │  ├─ test_embeddings.py
@@ -420,6 +456,10 @@ course-rag-assistant/
 
 项目知识库只有 5 份示例资料，启动时重建向量库的成本很低。`InMemoryVectorStore` 减少外部数据库依赖，让评审可以直接运行。若知识库扩大，建议替换为 Chroma、FAISS 或 PostgreSQL + pgvector，并把索引持久化。
 
+### 为什么增加标题感知重排
+
+纯哈希向量在小型中文语料上存在两个问题：短标题的权重不足，以及“ReAct Agent 的工作闭环”这类问法容易被含有 “Agent/工作” 的无关段落抢走。实现会先扩大候选集，再综合正文词项覆盖、章节标题匹配和向量召回顺序做轻量重排，最后才交给模型。
+
 ### 为什么有演示模式
 
 作业要求开发智能应用，但评审环境不一定有 API Key。演示模式解决的是“应用能否启动、检索和来源展示是否工作”的问题；真实大模型路径仍通过 `openai_compatible` 和 `ollama` 保留，并在 README 中明确区分。
@@ -440,15 +480,15 @@ course-rag-assistant/
 - 演示模式是抽取式回答，不是大模型生成；
 - Hashing Embedding 主要依赖词面特征，同义改写能力有限；
 - 知识库每次启动重建，不适合大规模语料；
-- 尚未实现 OCR、多轮记忆、权限控制和重排序；
+- 尚未实现 OCR、多轮记忆、权限控制和持久化；
 - 在线模式依赖服务商网络和额度；
-- 小参数离线模型在复杂推理上可能不稳定；
+- 小参数离线模型在复杂推理上可能不稳定；本项目用相关性门控和引用补全降低风险，但仍不等同于大模型质量保证；
 - 检索结果和模型回答仍需人工核验。
 
 ## 14. 后续可扩展方向
 
 - 使用 Chroma/FAISS 持久化向量索引；
-- 加入中文 BGE/BM25 混合检索和 Rerank；
+- 引入 BGE-M3/BM25 混合检索与神经 Reranker；
 - 增加引用高亮与 PDF 页码跳转；
 - 支持多轮对话和会话隔离；
 - 加入 LangGraph 工作流与工具调用；
