@@ -1,0 +1,19 @@
+GitHub 公开仓库验证记录
+========================
+
+仓库 URL：https://github.com/dusk5-Surtr/course-rag-assistant
+可见性：PUBLIC
+默认分支：main
+最新推送提交：4fd1f4850aec21b7b6fe27f2e9304cbe32b3d887
+GitHub Actions：run 43543976063，状态 success
+README.md：远程 API 校验存在，17,064 bytes，包含仓库链接与测试结果
+README.pdf：远程 API 校验存在，1,193,934 bytes
+首页截图：远程 API 校验存在，399,008 bytes
+答案截图：远程 API 校验存在，490,237 bytes
+
+本地验证：
+- python -m pytest -q：12 passed
+- python scripts/evaluate.py --demo：8/8（100%）
+- Streamlit 页面：http://127.0.0.1:8501，HTTP 200
+- Playwright + Microsoft Edge 截图已人工查看：首页、带来源引用的回答页
+- PDF：README.pdf，15 页，LibreOffice Kit 渲染页面已人工查看，无缺失字体
