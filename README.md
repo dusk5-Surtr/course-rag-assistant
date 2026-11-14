@@ -309,7 +309,7 @@ EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
 ### 9.1 自动化测试
 
 ```bash
-pytest -q
+python -m pytest -q
 ```
 
 测试覆盖：
@@ -341,7 +341,7 @@ python scripts/evaluate.py --demo
 
 | 验证项 | 实际结果 |
 |---|---|
-| 自动化测试 | `12 passed in 3.50s` |
+| 自动化测试 | `12 passed` |
 | 固定问题集评测 | `8/8`，100%（本地检索演示模式） |
 | 真实浏览器页面 | 首页与问答页均已截图并人工检查 |
 | 在线模型集成 | 通过本地 OpenAI 兼容协议 Mock 服务验证 LangChain ChatModel 调用链 |
@@ -394,6 +394,7 @@ course-rag-assistant/
 ├─ .env.example
 ├─ .gitignore
 ├─ LICENSE
+├─ pytest.ini                    # 测试路径与项目根目录
 ├─ README.md
 ├─ README.pdf                    # 作业平台可预览版
 ├─ SUBMISSION.md                 # 提交文案与检查清单
