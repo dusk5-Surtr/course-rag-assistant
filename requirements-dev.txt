@@ -1,0 +1,3 @@
+-r requirements.txt
+markdown==3.10.0
+playwright==1.65.2
